@@ -60,10 +60,10 @@ services:
       # 启用yubikey
       YUBICO_CLIENT_ID: ${YUBICO_CLIENT_ID}
       YUBICO_SECRET_KEY: ${YUBICO_SECRET_KEY}
-      # 启用 Duo
-      DUO_IKEY: ${DUO_IKEY}
-      DUO_SKEY: ${DUO_SKEY}
-      DUO_HOST: ${DUO_HOST}
+      # 启用 Duo，企业使用才需要
+      # DUO_IKEY: ${DUO_IKEY}
+      # DUO_SKEY: ${DUO_SKEY}
+      # DUO_HOST: ${DUO_HOST}
     env_file:
       # ADMIN_TOKEN 单独放这里:env_file 的值不会被 compose 做 ${} 插值,
       # argon2 哈希里的 $ 可以原样写,不用转义
