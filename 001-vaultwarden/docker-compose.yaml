@@ -57,7 +57,7 @@ services:
       # 如果是 EU 区域再加:
       # PUSH_RELAY_URI: ${PUSH_RELAY_URI}
       # PUSH_IDENTITY_URI: ${PUSH_IDENTITY_URI}
-      YUBICO_CLIENT_I: ${YUBICO_CLIENT_ID}
+      YUBICO_CLIENT_ID: ${YUBICO_CLIENT_ID}
       YUBICO_SECRET_KEY: ${YUBICO_SECRET_KEY}
     env_file:
       # ADMIN_TOKEN 单独放这里:env_file 的值不会被 compose 做 ${} 插值,
