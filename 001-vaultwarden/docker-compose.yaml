@@ -55,8 +55,8 @@ services:
       PUSH_INSTALLATION_ID: ${PUSH_INSTALLATION_ID}
       PUSH_INSTALLATION_KEY: ${PUSH_INSTALLATION_KEY}
       # 如果是 EU 区域再加:
-      PUSH_RELAY_URI: ${PUSH_RELAY_URI}
-      PUSH_IDENTITY_URI: ${PUSH_IDENTITY_URI}
+      # PUSH_RELAY_URI: ${PUSH_RELAY_URI}
+      # PUSH_IDENTITY_URI: ${PUSH_IDENTITY_URI}
     env_file:
       # ADMIN_TOKEN 单独放这里:env_file 的值不会被 compose 做 ${} 插值,
       # argon2 哈希里的 $ 可以原样写,不用转义
