@@ -64,6 +64,8 @@ services:
       # DUO_IKEY: ${DUO_IKEY}
       # DUO_SKEY: ${DUO_SKEY}
       # DUO_HOST: ${DUO_HOST}
+      # 开启后可以存 ssh 密钥
+      EXPERIMENTAL_CLIENT_FEATURE_FLAGS: ssh-key-vault-item,ssh-agent
     env_file:
       # ADMIN_TOKEN 单独放这里:env_file 的值不会被 compose 做 ${} 插值,
       # argon2 哈希里的 $ 可以原样写,不用转义
