@@ -23,8 +23,7 @@ docker run --rm -it vaultwarden/server:alpine /vaultwarden hash --preset owasp
 vim secrets.env     # 把哈希粘进 ADMIN_TOKEN=
 chmod 600 .env secrets.env
 
-# 4. (可选)中文邮件模板
-./pull-email-templates.sh
+# 4. (可选)中文化邮件 + 管理界面,见下方"中文化"章节
 
 # 5. 起
 docker compose up -d
@@ -51,64 +50,39 @@ Vaultwarden 1.30+ 的 WebSocket 通知走 `/notifications/hub`,和主端口同�
 - 首次注册完记得把 `SIGNUPS_ALLOWED` 保持 `false`,靠 `INVITATIONS_ALLOWED` 邀请人。
 - `DOMAIN` 必须和实际访问地址完全一致(含 https),否则 WebAuthn / 邮件链接会出问题。
 
-## 自定义:邮件模板(中文)+ CSS
+## 中文化:邮件 + 管理界面
 
-两者都走同一个 `TEMPLATES_FOLDER`(compose 里已设为 `/data/templates`,由 `./templates` 挂载进去)。
-`templates/` 是**配置,要进 git**;只有 `data/` 被忽略。
+Vaultwarden 默认邮件模板和 `/admin` 管理界面都是英文,而且**服务端只发一种语言**——
+用户的语言偏好纯在客户端,服务端不感知,做不到按用户分语言。要中文就得整体替换模板。
 
-```
-templates/
-├── email/                       # 邮件模板(中文翻译)
-│   ├── welcome.hbs              # 纯文本版
-│   ├── welcome.html.hbs         # HTML 版
-│   └── ...
-└── scss/
-    └── user.vaultwarden.scss.hbs   # 自定义 CSS
-```
-
-### 邮件模板
-
-Vaultwarden 只发英文邮件——用户的语言偏好是纯客户端的,服务端不知道,所以做不到按用户分语言。
-要中文就得整体替换模板,全站一种语言。
+社区已有现成翻译包 [WeiYusc/vaultwarden-lang-zhcn](https://github.com/WeiYusc/vaultwarden-lang-zhcn),
+覆盖 `admin/`(管理后台)和 `email/`(邮件)两套 Handlebars 模板。手动拷进数据卷就行,
+不需要脚本:
 
 ```bash
-./pull-email-templates.sh        # 按 .env 的 VAULTWARDEN_TAG 拉对应版本的 63 个模板
-# 翻译 templates/email/*.hbs
+git clone https://github.com/WeiYusc/vaultwarden-lang-zhcn /tmp/vw-zhcn
+# 本项目的 /data 挂在 ./data/vaultwarden,模板放到它下面的 templates/
+cp -r /tmp/vw-zhcn/templates ./data/vaultwarden/
 docker compose restart vaultwarden
 ```
 
-`.hbs` 格式:**第一行是邮件主题**,`<!---------------->` 是分隔符,下面是正文。
-`xxx.hbs` 是纯文本版,`xxx.html.hbs` 是 HTML 版,两个都要改。
+Vaultwarden 启动时优先从 `/data/templates` 读同名模板,找不到的自动回退内置英文版,
+所以只放 `admin/` 和 `email/` 不会影响 `404.hbs`、`scss/` 等其它页面。
+`data/` 已被 git 忽略,这份模板不进仓库,升级/迁移时按上面命令重新拷即可。
 
-```hbs
-欢迎使用
-<!---------------->
-感谢你在 {{url}} 注册账号,现在可以用新账号登录了。
+**模板和版本强绑定**:翻译包按某个 vaultwarden 版本(如 `1.37.0`)对齐,升级镜像时
+先到仓库确认 tag 是否匹配当前 `VAULTWARDEN_TAG`,不匹配可能渲染错乱或漏译。
 
-如果这不是你本人操作,忽略本邮件即可。
-{{> email/email_footer_text }}
-```
-
-`{{变量}}` 和 `{{> email/xxx}}` 一律原样保留,改坏了链接就失效。
-
-不想自己翻,wiki 上有几个现成的社区中文包(`vaultwarden-lang-zhcn` 等),直接拷进
-`templates/email/` 就行——但都是社区维护、按需自测。
-
-**模板和版本强绑定**,升级镜像必须同步核对:
-
-```bash
-vim .env                                    # 改 VAULTWARDEN_TAG
-./pull-email-templates.sh --upstream        # 新版原文拉到 .upstream/(不覆盖翻译)
-diff -ru .upstream/email templates/email    # 看上游改了什么,合进翻译
-```
+> 管理后台仍有少量英文(配置项说明、tooltip、部分弹窗)来自程序内置数据而非模板,
+> 无法通过 `/data/templates` 覆盖,属正常现象。
 
 ### CSS
 
-v1.33.0 起 web-vault 的样式可以覆盖,写在 `templates/scss/user.vaultwarden.scss.hbs`
-(仓库里已放了带注释的示例:页脚提示语、换 Logo、隐藏 2FA 选项)。
+v1.33.0 起 web-vault 的样式可以覆盖,写在 `./data/vaultwarden/templates/scss/user.vaultwarden.scss.hbs`
+(容器内路径 `/data/templates/scss/user.vaultwarden.scss.hbs`),常见用途:页脚提示语、换 Logo、隐藏 2FA 选项。
 
 - **别去建 `vaultwarden.scss.hbs`**,那是内置默认,一旦存在就整个覆盖掉,升级必炸。只碰 `user.` 那个。
-- 调试时把 `.env` 的 `RELOAD_TEMPLATES=true`,改完刷新即可,不用重启;调完改回 `false`。
+- 调试时给 vaultwarden 加环境变量 `RELOAD_TEMPLATES=true`,改完刷新即可,不用重启;调完改回 `false`。
 - 验证:`curl -s https://vault.example.com/vw_static/vaultwarden.css | tail`,看自己的规则在不在。
   没生效先确认容器里路径对: `docker compose exec vaultwarden ls /data/templates/scss`。
 - 选择器跟着 Bitwarden 前端走,**上游改版会随时失效**,升级后顺手看一眼。
