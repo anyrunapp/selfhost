@@ -49,6 +49,12 @@ Vaultwarden 1.30+ 的 WebSocket 通知走 `/notifications/hub`,和主端口同�
 - `POSTGRES_PASSWORD` 会拼进 `DATABASE_URL`,**只用字母数字**,省掉 URL 编码的坑。
 - 首次注册完记得把 `SIGNUPS_ALLOWED` 保持 `false`,靠 `INVITATIONS_ALLOWED` 邀请人。
 - `DOMAIN` 必须和实际访问地址完全一致(含 https),否则 WebAuthn / 邮件链接会出问题。
+- **附件配额**:`USER_ATTACHMENT_LIMIT` / `ORG_ATTACHMENT_LIMIT`(KB)限的是每用户 /
+  每组织的**累计总量**,不是单个文件。想限**单次上传的文件大小**要在反代做:
+  Caddy `request_body { max_size 200MB }`、Nginx `client_max_body_size 200m`。
+  全站总量 Vaultwarden 无原生开关,靠 per-user 配额×人数或数据卷容量卡。
+- 若已用 admin 面板改过配置(生成了 `data/vaultwarden/config.json`),面板值会**覆盖**
+  环境变量,两边别打架,统一在一处管。
 
 ## 中文化:邮件 + 管理界面
 
