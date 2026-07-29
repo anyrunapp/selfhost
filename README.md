@@ -10,7 +10,7 @@
 端口段 = PORT_BASE(20000) + 序号 * PORT_STRIDE(10)
 
 001-vaultwarden -> 20010 ~ 20019
-002-gitea       -> 20020 ~ 20029
+002-mysql       -> 20020 ~ 20029
 013-immich      -> 20130 ~ 20139
 ```
 
@@ -35,7 +35,7 @@ bin/ports.sh --check                  # 全仓库扫描:序号重复、端口越
 ## 新增一个应用
 
 ```bash
-mkdir -p 002-gitea && cd 002-gitea
+mkdir -p 003-gitea && cd 003-gitea
 # 写 docker-compose.yml,端口一律用 ${PORT_0} ${PORT_1} ...
 # 写 .env.example
 ../bin/ports.sh --write .

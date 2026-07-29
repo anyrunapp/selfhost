@@ -1,0 +1,37 @@
+name: ${APP_ID}-${APP_SLUG}
+
+services:
+  mysql:
+    image: mysql:${MYSQL_TAG}
+    container_name: ${APP_ID}-${APP_SLUG}
+    restart: unless-stopped
+    stop_grace_period: 1m
+    environment:
+      # 密码 / 库名 / 账号全部来自 .env,不在此硬编码
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: ${TZ}
+    command:
+      # 字符集 / 排序规则:统一 utf8mb4,避免 emoji、生僻字乱码
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      # 数据库内部时区(和 TZ 对齐,让 now() 走东八区)
+      - --default-time-zone=+08:00
+      # 允许创建自定义函数(部分框架迁移脚本需要)
+      - --log-bin-trust-function-creators=1
+    volumes:
+      # 数据目录挂到 ./data/mysql,已被 git 忽略
+      - ./data/mysql:/var/lib/mysql
+    ports:
+      # PORT_0:仅回环暴露,方便本机 mysql / 备份;
+      # 同机应用请走 compose 网络用服务名 mysql:3306 连,不要依赖这个端口
+      - "127.0.0.1:${PORT_0}:3306"
+    healthcheck:
+      # $$ 是 compose 转义,实际传给容器的是 $MYSQL_ROOT_PASSWORD(引用容器内环境变量)
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
