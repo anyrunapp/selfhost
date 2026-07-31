@@ -1,0 +1,60 @@
+name: ${APP_ID}-${APP_SLUG}
+
+services:
+  db:
+    image: postgres:${POSTGRES_TAG}
+    container_name: ${APP_ID}-${APP_SLUG}-db
+    restart: unless-stopped
+    stop_grace_period: 1m
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+      TZ: ${TZ}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    ports:
+      # PORT_1:仅回环暴露,方便本机 psql / 备份;不需要就整段注释掉
+      - "127.0.0.1:${PORT_1}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  memos:
+    image: neosmemo/memos:${MEMOS_TAG}
+    container_name: ${APP_ID}-${APP_SLUG}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # ---- 数据库:强制走 db 服务的 PostgreSQL,不用默认 sqlite ----
+      MEMOS_DRIVER: postgres
+      # lib/pq DSN(URL 形式);同网络明文连接,关掉 TLS。密码含特殊字符需 URL 编码,
+      # 所以 POSTGRES_PASSWORD 只用字母数字(见 .env.example)
+      MEMOS_DSN: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+      # 容器内监听端口(镜像默认已是 5230,显式写一遍)
+      MEMOS_PORT: "5230"
+      # 你的对外访问地址(带协议),用于生成分享链接等;本地测试可留空
+      MEMOS_INSTANCE_URL: ${MEMOS_INSTANCE_URL}
+      # 容器以 root 起、entrypoint 修好权限后降到该 UID/GID 运行
+      MEMOS_UID: "${MEMOS_UID}"
+      MEMOS_GID: "${MEMOS_GID}"
+      TZ: ${TZ}
+    volumes:
+      # 数据目录(附件、缩略图等;库在 postgres 里)。entrypoint 会自动 chown,bind mount 可用
+      - ./data/memos:/var/opt/memos
+    ports:
+      # PORT_0:HTTP 主端口,前面挂 Caddy/Nginx 反代 + TLS
+      - "127.0.0.1:${PORT_0}:5230"
+    healthcheck:
+      # alpine 基础镜像自带 busybox wget
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:5230/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
