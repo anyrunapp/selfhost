@@ -1,0 +1,29 @@
+name: ${APP_ID}-${APP_SLUG}
+
+services:
+  filecodebox:
+    image: lanol/filecodebox:${FILECODEBOX_TAG}
+    container_name: ${APP_ID}-${APP_SLUG}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      TZ: ${TZ}
+      # uvicorn worker 数,量大再调
+      WORKERS: ${WORKERS}
+      LOG_LEVEL: ${LOG_LEVEL}
+      # 反代场景:信任的代理网段,才会采信 X-Forwarded-*;留空=只信直连 IP。
+      # 前面挂 Caddy/Nginx 时填代理网段,例如 "172.16.0.0/12"
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS}
+    volumes:
+      # 持久化:SQLite 库 + 上传的文件都在这里(应用内置 SQLite,无外置数据库)
+      - ./data/filecodebox:/app/data
+    ports:
+      # PORT_0:HTTP 主端口,前面挂 Caddy/Nginx 反代 + TLS
+      - "127.0.0.1:${PORT_0}:12345"
+    healthcheck:
+      # 镜像是 python-slim,没有 curl/wget,用自带 python 探活 /health
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:12345/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
