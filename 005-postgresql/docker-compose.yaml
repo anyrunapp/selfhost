@@ -1,0 +1,48 @@
+name: ${APP_ID}-${APP_SLUG}
+
+# 独立 PostgreSQL 实例,给多个应用做后端库。
+# 想让其它 compose 应用走容器网络连它,取消下面 networks 注释,
+# 应用侧 join 同一个外部网络 selfhost-postgresql 后用服务名 postgresql:5432 连。
+# networks:
+#   default:
+#     name: selfhost-postgresql
+#     external: false
+
+services:
+  postgresql:
+    image: postgres:${POSTGRES_TAG}
+    container_name: ${APP_ID}-${APP_SLUG}
+    restart: unless-stopped
+    stop_grace_period: 1m
+    environment:
+      # 首启自动建库 + 业务账号(该账号即此库的 owner)
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # 校验和:及早发现磁盘静默损坏
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+      TZ: ${TZ}
+      # PGDATA 指到子目录,避免卷根目录混入 lost+found 等
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      # 数据目录挂到 ./data/postgres,已被 git 忽略
+      - ./data/postgres:/var/lib/postgresql/data
+    command:
+      # 数据库内部时区(和 TZ 对齐,让 now() 走东八区)
+      - postgres
+      - -c
+      - timezone=${PG_TIMEZONE}
+      # 连接数上限,按需调
+      - -c
+      - max_connections=${PG_MAX_CONNECTIONS}
+    ports:
+      # PORT_0:仅回环暴露,方便本机 psql / 备份;
+      # 同机应用请走 compose 网络用服务名 postgresql:5432 连,不要依赖这个端口
+      - "127.0.0.1:${PORT_0}:5432"
+    healthcheck:
+      # $$ 是 compose 转义,实际引用容器内环境变量
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
