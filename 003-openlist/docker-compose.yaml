@@ -1,0 +1,66 @@
+name: ${APP_ID}-${APP_SLUG}
+
+services:
+  db:
+    image: postgres:${POSTGRES_TAG}
+    container_name: ${APP_ID}-${APP_SLUG}-db
+    restart: unless-stopped
+    stop_grace_period: 1m
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+      TZ: ${TZ}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    ports:
+      # PORT_1:仅回环暴露,方便本机 psql / 备份;不需要就整段注释掉
+      - "127.0.0.1:${PORT_1}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  openlist:
+    image: openlistteam/openlist:${OPENLIST_TAG}
+    container_name: ${APP_ID}-${APP_SLUG}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # 官方镜像 entrypoint 带 --no-prefix,配置项环境变量无 OPENLIST_ 前缀。
+    # 数据目录属主必须是容器内 openlist 用户(默认 UID:GID=1001:1001),
+    # 见 readme「数据目录权限」:先 chown 宿主 ./data/openlist 再启动。
+    user: "${OPENLIST_UID}:${OPENLIST_GID}"
+    environment:
+      # ---- 数据库:强制走 db 服务的 PostgreSQL,不用默认 sqlite ----
+      DB_TYPE: postgres
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASS: ${POSTGRES_PASSWORD}
+      # 同一 compose 网络内明文连接,关掉 TLS
+      DB_SSL_MODE: disable
+      DB_TABLE_PREFIX: x_
+      # ---- 站点 ----
+      SITE_URL: ${SITE_URL}
+      # 容器内监听端口(EXPOSE 5244),对外映射见下方 ports
+      HTTP_PORT: "5244"
+      # ---- 其它 ----
+      UMASK: "022"
+      TZ: ${TZ}
+    volumes:
+      - ./data/openlist:/opt/openlist/data
+    ports:
+      # PORT_0:HTTP 主端口,前面挂 Caddy/Nginx 反代 + TLS
+      - "127.0.0.1:${PORT_0}:5244"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:5244/ping || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
