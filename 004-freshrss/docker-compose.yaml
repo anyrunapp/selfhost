@@ -1,0 +1,78 @@
+name: ${APP_ID}-${APP_SLUG}
+
+services:
+  db:
+    image: postgres:${POSTGRES_TAG}
+    container_name: ${APP_ID}-${APP_SLUG}-db
+    restart: unless-stopped
+    stop_grace_period: 1m
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+      TZ: ${TZ}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    ports:
+      # PORT_1:仅回环暴露,方便本机 psql / 备份;不需要就整段注释掉
+      - "127.0.0.1:${PORT_1}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  freshrss:
+    image: freshrss/freshrss:${FRESHRSS_TAG}
+    container_name: ${APP_ID}-${APP_SLUG}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    logging:
+      options:
+        max-size: 10m
+    environment:
+      # PHP 时区,影响抓取计划与显示
+      TZ: ${TZ}
+      # 定时刷新订阅的分钟位(cron 风格),留空则不自动刷新
+      CRON_MIN: ${CRON_MIN}
+      # production / development(后者日志更详细)
+      FRESHRSS_ENV: ${FRESHRSS_ENV}
+      # 反代可信来源,让日志/鉴权拿到真实客户端 IP
+      TRUSTED_PROXY: ${TRUSTED_PROXY}
+      # ---- 首次自动安装(仅首启生效!改了要删服务 + data 卷重来) ----
+      # 强制走下面的 db 服务(pgsql),不用默认 SQLite
+      FRESHRSS_INSTALL: |-
+        --api-enabled
+        --base-url ${BASE_URL}
+        --default-user ${ADMIN_USER}
+        --language ${DEFAULT_LANGUAGE}
+        --db-type pgsql
+        --db-host db
+        --db-base ${POSTGRES_DB}
+        --db-user ${POSTGRES_USER}
+        --db-password ${POSTGRES_PASSWORD}
+      # ---- 首次自动创建管理员(仅首启生效) ----
+      FRESHRSS_USER: |-
+        --user ${ADMIN_USER}
+        --password ${ADMIN_PASSWORD}
+        --api-password ${ADMIN_API_PASSWORD}
+        --email ${ADMIN_EMAIL}
+        --language ${DEFAULT_LANGUAGE}
+    volumes:
+      # 持久化数据(配置 + 用户数据);容器以 root 起、entrypoint 自动修权限,bind mount 可用
+      - ./data/freshrss:/var/www/FreshRSS/data
+      # 第三方扩展(可选,想干净就整行注释)
+      - ./data/extensions:/var/www/FreshRSS/extensions
+    ports:
+      # PORT_0:HTTP 主端口,前面挂 Caddy/Nginx 反代 + TLS
+      - "127.0.0.1:${PORT_0}:80"
+    healthcheck:
+      test: ["CMD", "cli/health.php"]
+      timeout: 10s
+      start_period: 60s
+      interval: 75s
+      retries: 3
