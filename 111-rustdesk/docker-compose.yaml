@@ -8,13 +8,13 @@ name: ${APP_ID}-${APP_SLUG}
 # 注意:官方镜像是 FROM scratch 的静态二进制,容器内没有 shell / wget,
 #      无法写容器内 healthcheck,这里只能省略(这是被迫的例外,见 readme)。
 #
-# 端口特殊性:RustDesk 客户端按固定偏移推算端口(NAT 测试口 = ID 口 - 1),
-# 所以宿主端口必须与容器端口保持“连续同序”。PORT_0..4 正好连续,映射如下:
-#   PORT_0 -> 21115/tcp      (hbbs, NAT 类型探测)
-#   PORT_1 -> 21116/tcp+udp  (hbbs, ID 注册/心跳/打洞,主端口)
-#   PORT_2 -> 21117/tcp      (hbbr, 中继)
-#   PORT_3 -> 21118/tcp      (hbbs, web 客户端 websocket)
-#   PORT_4 -> 21119/tcp      (hbbr, web 客户端 websocket)
+# 端口对齐:目录前缀选了 111,使算出的端口段正好是 21110-21119,于是
+# PORT_5..9 == RustDesk 原生端口,宿主口 = 容器口,一一对齐(也把整段占住防冲突):
+#   PORT_5 -> 21115/tcp      (hbbs, NAT 类型探测)
+#   PORT_6 -> 21116/tcp+udp  (hbbs, ID 注册/心跳/打洞,主端口)
+#   PORT_7 -> 21117/tcp      (hbbr, 中继)
+#   PORT_8 -> 21118/tcp      (hbbs, web 客户端 websocket)
+#   PORT_9 -> 21119/tcp      (hbbr, web 客户端 websocket)
 
 services:
   hbbr:
@@ -28,25 +28,24 @@ services:
       - ./data:/root
     ports:
       # 默认只绑回环;对公网提供服务需把 BIND_ADDR 改成 0.0.0.0(见 readme)
-      - "${BIND_ADDR}:${PORT_2}:21117"
-      - "${BIND_ADDR}:${PORT_4}:21119"
+      - "${BIND_ADDR}:${PORT_7}:21117"
+      - "${BIND_ADDR}:${PORT_9}:21119"
 
   hbbs:
     image: rustdesk/rustdesk-server:${RUSTDESK_TAG}
     container_name: ${APP_ID}-${APP_SLUG}-hbbs
     restart: unless-stopped
-    # 默认 RUSTDESK_HBBS_OPTS 为空 -> 命令即 `hbbs`。
-    # 宿主端口若与容器端口不一致,需用 `-r 公网IP:中继口` 告诉客户端真实中继地址。
+    # 宿主口 = 容器口,中继口一致,无需 `-r`;RUSTDESK_HBBS_OPTS 默认为空即 `hbbs`。
     command: hbbs ${RUSTDESK_HBBS_OPTS}
     environment:
       TZ: ${TZ}
     volumes:
       - ./data:/root
     ports:
-      - "${BIND_ADDR}:${PORT_0}:21115"
-      - "${BIND_ADDR}:${PORT_1}:21116"
-      - "${BIND_ADDR}:${PORT_1}:21116/udp"
-      - "${BIND_ADDR}:${PORT_3}:21118"
+      - "${BIND_ADDR}:${PORT_5}:21115"
+      - "${BIND_ADDR}:${PORT_6}:21116"
+      - "${BIND_ADDR}:${PORT_6}:21116/udp"
+      - "${BIND_ADDR}:${PORT_8}:21118"
     depends_on:
       # 仅保证启动顺序(scratch 镜像无法做 healthcheck 条件)
       - hbbr
