@@ -1,0 +1,49 @@
+name: ${APP_ID}-${APP_SLUG}
+
+# 独立 Redis 实例,给多个应用做缓存 / 队列 / 会话后端。
+# 想让其它 compose 应用走容器网络连它,取消下面 networks 注释,
+# 应用侧 join 同一个外部网络 selfhost-redis 后用服务名 redis:6379 连。
+# networks:
+#   default:
+#     name: selfhost-redis
+#     external: false
+
+services:
+  redis:
+    image: redis:${REDIS_TAG}
+    container_name: ${APP_ID}-${APP_SLUG}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    command:
+      - redis-server
+      # 密码从 .env 注入(见下方 environment),不在此硬编码
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      # AOF 持久化:掉电也尽量不丢数据(比默认 RDB 更稳)
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      # 内存上限 + 淘汰策略,防止把宿主内存吃爆
+      - --maxmemory
+      - ${REDIS_MAXMEMORY}
+      - --maxmemory-policy
+      - ${REDIS_MAXMEMORY_POLICY}
+    environment:
+      # 供 healthcheck 里 redis-cli -a 引用($$ 取容器内变量)
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+      # 数据目录挂到 ./data/redis(AOF/RDB 文件),已被 git 忽略
+      - ./data/redis:/data
+    ports:
+      # PORT_0:仅回环暴露,方便本机 redis-cli / 备份;
+      # 同机应用请走 compose 网络用服务名 redis:6379 连,不要依赖这个端口
+      - "127.0.0.1:${PORT_0}:6379"
+    healthcheck:
+      # $$ 是 compose 转义,实际引用容器内环境变量;带密码 ping
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
