@@ -1,0 +1,39 @@
+# ======================================================================
+#  Caddy 反向代理配置(模板)
+#  加一个反代 = 复制下面「站点」里的任意一段,改域名和端口即可。
+#  SSL 全自动:域名解析到本机、80/443 放行,Caddy 就会自动签发并续期证书。
+#  改完这个文件后热加载(不断连):
+#     docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+# ======================================================================
+
+{
+	# ACME 账户邮箱(证书快过期时邮件提醒);由 .env 的 ACME_EMAIL 注入,冒号后是缺省值
+	email {$ACME_EMAIL:you@example.com}
+
+	# 调试期想避开 Let's Encrypt 速率限制,临时启用 staging(证书不被浏览器信任):
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+# ---- 复用片段:反代到本机某端口的后端。用法: import backend <PORT> ----
+(backend) {
+	reverse_proxy 127.0.0.1:{args[0]}
+}
+
+# ======================= 站点:在下面加你的反代 =======================
+# 端口就填对应应用的 PORT_x(见各应用 readme / .env),例如:
+#   001-vaultwarden PORT_0 = 20010
+#   007-memos       PORT_0 = 20070
+#   006-filecodebox PORT_0 = 20060
+
+# vault.example.com {
+# 	import backend 20010
+# }
+
+# memos.example.com {
+# 	import backend 20070
+# }
+
+# 需要自定义(大文件上传 / websocket / 额外 header)时,直接写 reverse_proxy:
+# files.example.com {
+# 	reverse_proxy 127.0.0.1:20060
+# }

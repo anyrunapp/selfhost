@@ -1,0 +1,32 @@
+name: ${APP_ID}-${APP_SLUG}
+
+# Caddy —— 边缘反向代理 + 自动 HTTPS(Let's Encrypt / ZeroSSL 自动签发、自动续期)。
+# 它正是仓库约定里那个「前置的反代 + TLS」,所以必须对公网监听 80/443,
+# 是端口约定的合理例外(不走 ${PORT_x}、不绑 127.0.0.1)。
+#
+# 网络:用 host 模式,直接共享宿主的 127.0.0.1。这样能反代所有「只绑 127.0.0.1:${PORT_x}」
+# 的其它 selfhost 应用,无需改动它们、也无需共享 docker 网络 —— 复制粘贴最省事。
+#   反代某应用 = 在 ./Caddyfile 里加一段,后端写 127.0.0.1:<该应用的 PORT_x>。
+
+services:
+  caddy:
+    image: caddy:${CADDY_TAG}
+    container_name: ${APP_ID}-${APP_SLUG}
+    restart: unless-stopped
+    network_mode: host          # 直连宿主 loopback,直接绑 80/443/2019
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL} # 证书即将过期时邮件提醒 + ACME 账户
+      TZ: ${TZ}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 证书 + ACME 账户,务必持久化(丢了会重新签发,可能触发 Let's Encrypt 速率限制)
+      - ./data/caddy_data:/data
+      # Caddy 自动生成的 JSON 配置
+      - ./data/caddy_config:/config
+    healthcheck:
+      # admin API 默认监听 127.0.0.1:2019;host 网络下可直接探;镜像自带 busybox wget
+      test: ["CMD", "wget", "-qO-", "--timeout=5", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

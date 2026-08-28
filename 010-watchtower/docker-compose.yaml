@@ -1,0 +1,39 @@
+name: ${APP_ID}-${APP_SLUG}
+
+# Watchtower —— 自动更新 docker 容器镜像(拉新镜像 + 重建容器)。
+#
+# 关键:默认「按标签选择」(WATCHTOWER_LABEL_ENABLE=true),只更新显式打了
+#   com.centurylinklabs.watchtower.enable=true 标签的容器,不会乱动全部容器。
+# 这契合本仓库「镜像锁版本」的做法 —— 由你决定哪些容器吃自动更新,并给它们用滚动 tag。
+#
+# 注意:本应用是纯守护进程,无对外端口;官方镜像 FROM scratch(无 shell),故无 healthcheck。
+
+services:
+  watchtower:
+    image: containrrr/watchtower:${WATCHTOWER_TAG}
+    container_name: ${APP_ID}-${APP_SLUG}
+    restart: unless-stopped
+    environment:
+      # 只更新带 enable 标签的容器(而非全部)
+      WATCHTOWER_LABEL_ENABLE: "true"
+      # 更新后删掉旧镜像,省磁盘
+      WATCHTOWER_CLEANUP: "true"
+      # 一次滚动重启一个,减少同时中断
+      WATCHTOWER_ROLLING_RESTART: "true"
+      # 定时:6 段 cron(秒 分 时 日 月 周),默认每天 04:00 检查
+      WATCHTOWER_SCHEDULE: ${WATCHTOWER_SCHEDULE}
+      # 时区,影响 cron 触发与日志时间戳
+      TZ: ${TZ}
+      # watchtower 1.7.1 内置的 docker 客户端默认 API 太旧,新版 daemon 会拒;显式指定
+      DOCKER_API_VERSION: ${DOCKER_API_VERSION}
+      # ---- 可选:指标 API(默认关)。开了再取消下方 ports 注释暴露到本机 ----
+      # WATCHTOWER_HTTP_API_METRICS: "true"
+      # WATCHTOWER_HTTP_API_TOKEN: ${WATCHTOWER_API_TOKEN}
+      # ---- 可选:更新完发通知(shoutrrr URL,支持 tg / bark / 邮件等)----
+      # WATCHTOWER_NOTIFICATION_URL: ${WATCHTOWER_NOTIFICATION_URL}
+    volumes:
+      # 需要读写 docker.sock 才能拉镜像 / 重建容器(等同宿主 root 权限,注意安全)
+      - /var/run/docker.sock:/var/run/docker.sock
+    # ports:
+    #   # 指标 API,仅启用 WATCHTOWER_HTTP_API_METRICS 时需要;只绑回环
+    #   - "127.0.0.1:${PORT_0}:8080"

@@ -31,11 +31,7 @@ sed -i "s/CHANGE_ME/$(openssl rand -hex 24)/" .env
 vim .env            # 也可手改域名 SITE_URL / 库名 / 账号
 chmod 600 .env
 
-# 3. 建数据目录并改属主(关键,见下)
-mkdir -p data/openlist data/postgres
-sudo chown -R 1001:1001 data/openlist     # 对齐 .env 里的 OPENLIST_UID/GID
-
-# 4. 起
+# 3. 起(数据目录权限由 init 服务自动搯定,无需手动 chown)
 docker compose up -d
 docker compose logs -f openlist
 ```
@@ -43,11 +39,15 @@ docker compose logs -f openlist
 ## 数据目录权限(v4.1.0 起容器非 root 运行)
 
 容器内以 `openlist` 用户(默认 `UID:GID=1001:1001`)运行,对 `/opt/openlist/data`
-需要读写 + 执行权限。宿主的 `./data/openlist` 必须属于同一 UID,否则启动即报
-`Current user does not have write and/or execute permissions`。
+需要读写 + 执行权限。而 bind mount 的 `./data/openlist` 首次由 Docker 建为 `root` 所有,
+直接起会报 `Current user does not have write and/or execute permissions`。
 
-- 改属主:`sudo chown -R 1001:1001 data/openlist`
-- 想换别的 UID,同时改 `.env` 的 `OPENLIST_UID/OPENLIST_GID` 和 chown 目标。
+本编排用一个 **`init` 服务**(busybox,root)在 openlist 启动前自动
+`chown -R ${OPENLIST_UID}:${OPENLIST_GID} /data`,所以**无需手动 `sudo chown`**。
+openlist 通过 `depends_on: init → service_completed_successfully` 等它贑完再起。
+
+- 想换别的 UID:改 `.env` 的 `OPENLIST_UID/OPENLIST_GID` 即可,init 会按新值重新搯定。
+- 已有旧数据想重置属主,`docker compose up -d` 会重跑 init 自动修好。
 
 ## 首次登录 / 管理员密码
 
